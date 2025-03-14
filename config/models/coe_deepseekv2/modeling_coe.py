@@ -1072,6 +1072,233 @@ class CoeFlashAttention2(CoeAttention):
 
         return attn_output, attn_weights, past_key_value
 
+    def _flash_channel_minimax_attention_forward(
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
+    ):
+        """
+        Calls the forward method of Flash Attention with MoBA (Mixture of Block Attention)
+        
+        Args:
+            query_states: tensor with shape [batch_size, seq_len, num_heads, head_dim]
+            key_states: tensor with shape [batch_size, seq_len, num_heads, head_dim]
+            value_states: tensor with shape [batch_size, seq_len, num_heads, head_dim]
+            attention_mask: attention mask to avoid attention on padding tokens
+            query_length: integer specifying the length of queries
+            dropout: dropout probability
+            softmax_scale: scaling factor for softmax computation
+            block_size: size of blocks for MoBA splitting (B parameter)
+            top_k: number of top blocks to select for attention
+        """
+        import torch
+        import torch.nn.functional as F
+        
+        if not block_size:
+            # Default block size if not specified
+            block_size = 64
+            
+        if not top_k:
+            # Default top_k if not specified
+            top_k = 8
+            
+        batch_size = query_states.shape[0]
+        seq_length = key_states.shape[1]
+        num_heads = query_states.shape[2]
+        head_dim = query_states.shape[3]
+        
+        # Calculate number of blocks
+        num_blocks = seq_length // block_size
+        if seq_length % block_size != 0:
+            # Pad to make divisible by block_size
+            padding = block_size - (seq_length % block_size)
+            key_states = F.pad(key_states, (0, 0, 0, 0, 0, padding))
+            value_states = F.pad(value_states, (0, 0, 0, 0, 0, padding))
+            seq_length = key_states.shape[1]
+            num_blocks = seq_length // block_size
+        
+        # Step 1: Split KV into blocks
+        key_blocks = key_states.view(batch_size, num_blocks, block_size, num_heads, head_dim)
+        value_blocks = value_states.view(batch_size, num_blocks, block_size, num_heads, head_dim)
+        
+        # Step 2-3: Compute gating scores for dynamic block selection
+        # Mean pool the key blocks to get block representations
+        key_mean = torch.mean(key_blocks, dim=2)  # [batch_size, num_blocks, num_heads, head_dim]
+        
+        # Compute block selection scores
+        # Reshape query for batch matrix multiplication
+        q_reshaped = query_states.view(batch_size, query_length, num_heads, 1, head_dim)
+        k_mean_reshaped = key_mean.transpose(-1, -2)  # [batch_size, num_blocks, num_heads, head_dim, 1]
+        
+        # Compute scores [batch_size, query_length, num_heads, num_blocks]
+        selection_scores = torch.matmul(q_reshaped, k_mean_reshaped).squeeze(-1)
+        
+        # Step 4-5: Create causal mask and apply it
+        if self.is_causal:
+            # Create causal mask to prevent attention to future blocks
+            # For each query position, determine which block it belongs to
+            query_block_indices = torch.arange(query_length, device=query_states.device) // block_size
+            query_block_indices = query_block_indices.view(1, -1, 1, 1).expand(batch_size, -1, num_heads, 1)
+            
+            # Create block indices
+            block_indices = torch.arange(num_blocks, device=query_states.device)
+            block_indices = block_indices.view(1, 1, 1, -1).expand(batch_size, query_length, num_heads, -1)
+            
+            # Apply causal constraint (can only attend to blocks up to and including current block)
+            causal_mask = block_indices > query_block_indices
+            selection_scores = selection_scores.masked_fill(causal_mask, float("-inf"))
+        
+        # Step 6-7: Select top-k blocks for each query position
+        # Get top-k block indices and their scores
+        top_k_values, top_k_indices = torch.topk(selection_scores, min(top_k, num_blocks), dim=-1)
+        
+        # Step 8-9: Organize attention patterns
+        # Split attention into two paths:
+        # 1. Self-attention within the same block (local context)
+        # 2. Attention to the selected top-k blocks (global context)
+        
+        # Compute outputs using original flash attention mechanism
+        results = []
+        
+        # Determine if we're using top-left mask
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            causal = self.is_causal and query_length != 1
+            
+        # Process each query position with its corresponding top-k blocks
+        # Note: This is a simplified version - a real implementation would be more optimized
+        
+        # Extract the current block for self-attention for each query position
+        query_block_idx = torch.arange(query_length, device=query_states.device) // block_size
+        
+        # Prepare output tensor
+        attn_output = torch.zeros_like(query_states)
+        
+        # Path 1: Self-attention within blocks
+        for i in range(num_blocks):
+            # Select queries in current block
+            block_mask = (query_block_idx == i)
+            if not block_mask.any():
+                continue
+                
+            q_block = query_states[:, block_mask, :, :]
+            
+            # Corresponding keys and values for self-attention
+            k_self = key_blocks[:, i, :, :, :].view(batch_size, block_size, num_heads, head_dim)
+            v_self = value_blocks[:, i, :, :, :].view(batch_size, block_size, num_heads, head_dim)
+            
+            # Apply flash attention
+            if attention_mask is not None:
+                # Handle padding within the block
+                block_attn_mask = attention_mask[:, block_mask][:, :, i*block_size:(i+1)*block_size]
+                
+                # Prepare for flash_attn_varlen_func
+                (
+                    q_unpad, k_unpad, v_unpad, 
+                    indices_q, cu_seq_lens, max_seq_lens
+                ) = self._upad_input(
+                    q_block, k_self, v_self, block_attn_mask, q_block.size(1)
+                )
+                
+                cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+                max_seqlen_q, max_seqlen_k = max_seq_lens
+                
+                self_attn_output = flash_attn_varlen_func(
+                    q_unpad, k_unpad, v_unpad,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_k,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_k,
+                    dropout_p=dropout,
+                    softmax_scale=softmax_scale,
+                    causal=causal,
+                )
+                
+                # Pad back the output
+                block_output = pad_input(
+                    self_attn_output, indices_q, batch_size, q_block.size(1)
+                )
+            else:
+                block_output = flash_attn_func(
+                    q_block, k_self, v_self,
+                    dropout,
+                    softmax_scale=softmax_scale,
+                    causal=causal,
+                )
+            
+            # Add self-attention results to output
+            attn_output[:, block_mask, :, :] += 0.5 * block_output  # Weight for self-attention
+            
+        # Path 2: MoBA attention to top-k blocks
+        for b_idx in range(batch_size):
+            for q_idx in range(query_length):
+                # Get block indices for this query position
+                moba_indices = top_k_indices[b_idx, q_idx, :, :]
+                
+                # Gather the corresponding key and value blocks
+                # Note: This gather operation is done here for clarity
+                # A real implementation would optimize this part 
+                k_moba = torch.cat([key_blocks[b_idx:b_idx+1, idx, :, :, :] for idx in moba_indices[0]], dim=1)
+                v_moba = torch.cat([value_blocks[b_idx:b_idx+1, idx, :, :, :] for idx in moba_indices[0]], dim=1)
+                
+                q_moba = query_states[b_idx:b_idx+1, q_idx:q_idx+1, :, :]
+                
+                # Apply flash attention for this query with selected blocks
+                if attention_mask is not None:
+                    # Create attention mask for selected blocks
+                    # Note: This is simplified; real implementation would handle this differently
+                    moba_attn_mask = torch.ones(
+                        1, 1, k_moba.size(1), device=query_states.device, dtype=torch.bool
+                    )
+                    
+                    (
+                        q_unpad, k_unpad, v_unpad, 
+                        indices_q, cu_seq_lens, max_seq_lens
+                    ) = self._upad_input(
+                        q_moba, k_moba, v_moba, moba_attn_mask, 1
+                    )
+                    
+                    cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+                    max_seqlen_q, max_seqlen_k = max_seq_lens
+                    
+                    moba_output = flash_attn_varlen_func(
+                        q_unpad, k_unpad, v_unpad,
+                        cu_seqlens_q=cu_seqlens_q,
+                        cu_seqlens_k=cu_seqlens_k,
+                        max_seqlen_q=max_seqlen_q,
+                        max_seqlen_k=max_seqlen_k,
+                        dropout_p=dropout,
+                        softmax_scale=softmax_scale,
+                        causal=False,  # No need for causal within selected blocks
+                    )
+                    
+                    # Pad back the output
+                    block_moba_output = pad_input(
+                        moba_output, indices_q, 1, 1
+                    )
+                else:
+                    block_moba_output = flash_attn_func(
+                        q_moba, k_moba, v_moba,
+                        dropout,
+                        softmax_scale=softmax_scale,
+                        causal=False,  # No need for causal within selected blocks
+                    )
+                
+                # Add MoBA attention results to output
+                attn_output[b_idx, q_idx, :, :] += 0.5 * block_moba_output[0, 0, :, :]  # Weight for MoBA attention
+        
+        # Step 10: Combined results are already merged with weighted average above (0.5 each path)
+        # In a more optimized implementation, we might use softmax for adaptive weights
+
+        return attn_output
+
+
     def _flash_attention_forward(
         self,
         query_states,
