@@ -39,7 +39,7 @@ Our research introduces Chain-of-Experts (CoE), a new approach that innovates ho
 
 ## Environment Setup
 ```bash
-bash setup.sh # setting up environment
+bash scripts/setup.sh # setting up environment
 ```
 ## running experiments
 ```bash
