@@ -7,7 +7,7 @@ export MASTER_PORT=29500
 export GENERAL_NAME="dsv2_coe"
 export CONFIGS=(
     "main_64ept-8tpk-1itr:num_experts=64:num_experts_per_tok=8:inner_iter=1"
-    "main_64ept-4tpk-2itr:num_experts=64:num_experts_per_tok=4:inner_iter=2"
+    # "relu-512vcr-64ept-8tpk-1itr:num_experts=64:num_experts_per_tok=8:inner_iter=1:vocab_rank=512" # test for last layer change
 
     #########################################################################
     ### for below analysis experiments, please run it based on your own needs
@@ -33,7 +33,7 @@ export CONFIGS=(
 export TRAIN_FILES="data/metamathqa/train.parquet"
 export VAL_FILES="data/metamathqa/test.parquet"
 export TRAIN_BATCH_SIZE=64
-export MICRO_BATCH_SIZE_PER_GPU=4
+export MICRO_BATCH_SIZE_PER_GPU=64 # H100. For 4090, please use 16
 export LR_SCHEDULER="constant"
 export N_SHARED_EXPERTS=1
 

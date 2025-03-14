@@ -28,6 +28,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+import torch.nn.functional as F
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
@@ -1615,7 +1616,14 @@ class CoeForCausalLM(CoePreTrainedModel):
         super().__init__(config)
         self.model = CoeModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        if config.vocab_rank > 0:
+            self.lm_head = nn.Sequential(
+                nn.Linear(config.hidden_size, config.vocab_rank, bias=False),
+                nn.ReLU(),
+                nn.Linear(config.vocab_rank, config.vocab_size, bias=False),
+            )
+        else:
+            self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
