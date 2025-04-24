@@ -33,7 +33,7 @@ export CONFIGS=(
 export TRAIN_FILES="data/metamathqa/train.parquet"
 export VAL_FILES="data/metamathqa/test.parquet"
 export TRAIN_BATCH_SIZE=64
-export MICRO_BATCH_SIZE_PER_GPU=4
+export MICRO_BATCH_SIZE_PER_GPU=64
 export LR_SCHEDULER="constant"
 export N_SHARED_EXPERTS=1
 
