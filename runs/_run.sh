@@ -4,6 +4,7 @@ set -x  # Print each command before execution
 # Default config values (will be used if not set by the calling script)
 GENERAL_NAME=${GENERAL_NAME:-"run"}
 CUDA_DEVICE=${CUDA_DEVICE:-0}
+NUM_GPUS=${NUM_GPUS:-1}
 MASTER_PORT=${MASTER_PORT:-29500}
 CONFIGS=${CONFIGS:-()}
 PROJECT_NAME=${PROJECT_NAME:-"metamathqa-sft"}
@@ -52,11 +53,12 @@ base_args=(
     "+model.override_config.inner_residual=$INNER_RESIDUAL"
     "+model.override_config.use_igate=$USE_IGATE"
     "+model.override_config.n_shared_experts=$N_SHARED_EXPERTS"
-    "trainer.default_local_dir=$DEFAULT_LOCAL_DIR"
+    # "trainer.default_local_dir=$DEFAULT_LOCAL_DIR"
     "trainer.total_epochs=null"
     "trainer.total_training_steps=$TOTAL_TRAINING_STEPS"
     "trainer.validation_interval_steps=$VALIDATION_INTERVAL_STEPS"
     "trainer.total_validation_count=$TOTAL_VALIDATION_COUNT"
+    "+trainer.n_gpus_per_node=$NUM_GPUS"
     "trainer.logger=$LOGGER"
     "trainer.default_hdfs_dir=$DEFAULT_HDFS_DIR"
     "optim.lr_scheduler=$LR_SCHEDULER"
@@ -74,7 +76,7 @@ for config in "${CONFIGS[@]}"; do
     IFS=':' read -r suffix rest_of_config <<< "$config"
     
     # Build command
-    cmd="torchrun --master_port=$MASTER_PORT main.py"
+    cmd="torchrun --standalone --nnodes=1 --master_port=$MASTER_PORT --nproc_per_node=$NUM_GPUS main.py"
     
     # Add base arguments
     for arg in "${base_args[@]}"; do
@@ -83,6 +85,7 @@ for config in "${CONFIGS[@]}"; do
     
     # Add experiment name
     cmd+=" trainer.experiment_name=$GENERAL_NAME-$suffix"
+    cmd+=" trainer.default_local_dir=checkpoints/$GENERAL_NAME-$suffix"
     
     # Add micro batch size
     cmd+=" data.micro_batch_size_per_gpu=$MICRO_BATCH_SIZE_PER_GPU"
