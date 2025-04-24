@@ -49,7 +49,7 @@ class BaseDataset(Dataset):
         assert truncation in ['error', 'left', 'right']
         self.truncation = truncation
 
-        if not isinstance(parquet_files, List):
+        if isinstance(parquet_files, str):
             parquet_files = [parquet_files]
 
         self.parquet_files = parquet_files

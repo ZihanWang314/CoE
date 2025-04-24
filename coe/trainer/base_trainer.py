@@ -14,7 +14,7 @@ import re
 import torch
 import torch.distributed
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM, PreTrainedModel
 from torch.utils.data import DataLoader, DistributedSampler
 from torch import nn, optim
 from tensordict import TensorDict
@@ -31,8 +31,17 @@ logger.setLevel(os.getenv('VERL_SFT_LOGGING_LEVEL', 'WARN'))
 from coe.utils.dataset.base_dataset import BaseDataset
 from coe.trainer.fsdp_sft_trainer import FSDPSFTTrainer
 from coe.utils.debug.performance import get_gpu_memory_usage
-import wandb
+# import wandb
 import time
+from codetiming import Timer
+from contextlib import contextmanager
+from typing import Dict
+
+@contextmanager
+def _timer(name: str, timing_raw: Dict[str, float]):
+    with Timer(name=name, logger=None) as timer:
+        yield
+    timing_raw[name] = timer.last
 
 # temporary for debugging
 from typing import List, Union
@@ -70,6 +79,8 @@ class BaseTrainer(FSDPSFTTrainer):
     def __init__(self, config, device_mesh: DeviceMesh=None, ulysses_device_mesh: DeviceMesh=None, dataset_class = BaseDataset):
         if config.get("fsdp", True):
             super().__init__(config, device_mesh, ulysses_device_mesh, dataset_class)
+
+            self.model.resize_token_embeddings(len(self.tokenizer))
         else:
             raise NotImplementedError
         
@@ -138,8 +149,7 @@ class BaseTrainer(FSDPSFTTrainer):
             tracking = None
 
         global_step = 0
-        # compute the total training steps.
-        # the total training steps in SFT is mainly for early exit
+        # The total training steps in SFT is mainly for early exit
         # assert only 1 is valid
         
         # TODO (zhangchi.usc1992) add back checkpoint manager. Currently, it blocks when uploading to hdfs. So very slow.
@@ -152,38 +162,59 @@ class BaseTrainer(FSDPSFTTrainer):
         train_iterator = iter(self.train_dataloader)
     
         if rank == 0:
-            wandb.log({"System-core/non_emb_params": sum(p.numel() for p in self.model.model.layers.parameters()) / (1024 ** 2)}, step=global_step)
+            tracking.log({"System-core/non_emb_params": sum(p.numel() for p in self.model.model.layers.parameters()) / (1024 ** 2)}, step=global_step)
 
         epoch = 0
         start_time = time.time()
         while global_step < self.total_steps:
-            try:
-                data = next(train_iterator)
-            except StopIteration:
-                # Reset iterator for next epoch
-                epoch += 1
-                self.train_sampler.set_epoch(epoch=epoch)
-                train_iterator = iter(self.train_dataloader)
-                data = next(train_iterator)
+            timing_raw = {}
+            with _timer('step', timing_raw):
+                try:
+                    with _timer('data_loading', timing_raw):
+                        data = next(train_iterator)
+                except StopIteration:
+                    # Reset iterator for next epoch
+                    epoch += 1
+                    self.train_sampler.set_epoch(epoch=epoch)
+                    train_iterator = iter(self.train_dataloader)
+                    with _timer('data_loading', timing_raw):
+                        data = next(train_iterator)
+                    
+                # Process batch    
+                data = TensorDict(data, batch_size=self.config.data.train_batch_size).cuda()
+                with _timer('train_step', timing_raw):
+                    metric = self.training_step(data, timing_raw)
+
+                if rank == 0:
+                    tracking.log(data=metric, step=global_step)
+                    tracking.log(get_gpu_memory_usage(rank=0), step=global_step) # only log rank 0, assume all ranks have the same memory usage
+                    tracking.log({"System-core/time": time.time() - start_time}, step=global_step)
+                global_step += 1
                 
-            # Process batch    
-            data = TensorDict(data, batch_size=self.config.data.train_batch_size).cuda()
-            metric = self.training_step(data)
-            
+                # Run validation if needed
+                if validation_interval and global_step % validation_interval == 0:
+                    with _timer('validation', timing_raw):
+                        self._run_validation(global_step, rank, tracking)
+                    torch.distributed.barrier()
+                
+                # Save checkpoint if needed
+                if save_interval and global_step % save_interval == 0:
+                    with _timer('save_checkpoint', timing_raw):
+                        self.save_checkpoint(step=global_step)
+
             if rank == 0:
-                tracking.log(data=metric, step=global_step)
-                wandb.log(get_gpu_memory_usage(rank=0), step=global_step) # only log rank 0, assume all ranks have the same memory usage
-                wandb.log({"System-core/time": time.time() - start_time}, step=global_step)
-            global_step += 1
-            
-            # Run validation if needed
-            if validation_interval and global_step % validation_interval == 0:
-                self._run_validation(global_step, rank, tracking)
-                torch.distributed.barrier()
-            
-            # Save checkpoint if needed
-            if save_interval and global_step % save_interval == 0:
-                self.save_checkpoint(step=global_step)
+                if timing_raw != {}:
+                    log_timing_raw = {}
+                    for k, v in timing_raw.items():
+                        log_timing_raw[f'timing_s/{k}'] = v
+                    tracking.log(log_timing_raw, step=global_step)
+
+            # === TFLOPS calculation ===
+            if rank == 0:
+                if 'train_step' in timing_raw and timing_raw['train_step'] > 0:
+                    tflops = self.estimate_tflops(self.fsdp_model, data, timing_raw['train_step'])
+                    metric['train/tflops'] = tflops
+                    tracking.log({'train/tflops': tflops}, step=global_step)
             
         self._run_validation(global_step, rank, tracking)
         torch.distributed.barrier()
@@ -191,8 +222,27 @@ class BaseTrainer(FSDPSFTTrainer):
         # Final checkpoint
         self.save_checkpoint(step=global_step)
 
+    def estimate_tflops(self, model, batch, step_time_s):
+        """
+        Roughly estimate TFLOPS for the current step.
+        """
+        # Number of model parameters
+        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        # Assume input is TensorDict, get input_ids shape
+        if isinstance(batch, TensorDict):
+            batch_size = batch['input_ids'].shape[0]
+            seq_len = batch['input_ids'].shape[1]
+        else:
+            batch_size = batch['input_ids'].size(0)
+            seq_len = batch['input_ids'].size(1)
+        # 2 * param * batch * seq (forward + backward)
+        flops = 2 * num_params * batch_size * seq_len #TODO: coe may go through a param several times, this may be taken into account
+        tflops = flops / step_time_s / 1e12
+        return tflops
 
-    def training_step(self, batch: TensorDict):
+    def training_step(self, batch: TensorDict, timing_raw=None):
+        if timing_raw is None:
+            timing_raw = {}
         rank = self.device_mesh.get_rank()
 
         self.fsdp_model.train()
@@ -207,19 +257,24 @@ class BaseTrainer(FSDPSFTTrainer):
         n_micro_batches = len(micro_batches)
         step_loss = 0
         for micro_batch in micro_batches:
-            loss = self._compute_loss_and_backward(batch=micro_batch, do_backward=False) / n_micro_batches
-            loss.backward()
-            step_loss += loss.item()
-            grad_norm = self.fsdp_model.clip_grad_norm_(max_norm=self.config.optim.clip_grad)
+            with _timer('micro_batch_forward_backward', timing_raw):
+                with _timer('micro_batch_forward', timing_raw):
+                    loss = self._compute_loss_and_backward(batch=micro_batch, do_backward=False) / n_micro_batches
+                with _timer('micro_batch_loss_backward', timing_raw):
+                    loss.backward()
+                step_loss += loss.item()
+                grad_norm = self.fsdp_model.clip_grad_norm_(max_norm=self.config.optim.clip_grad)
 
 
         log_gpu_memory_usage('Before optimizer step', logger=logger)
 
-        self.optimizer.step()
+        with _timer('micro_batch_optimizer_step', timing_raw):
+            self.optimizer.step()
 
         log_gpu_memory_usage('After optimizer step', logger=logger)
 
-        self.lr_scheduler.step()
+        with _timer('micro_batch_lr_scheduler_step', timing_raw):
+            self.lr_scheduler.step()
 
         # reduce loss across dp ranks
         lr = self.lr_scheduler.get_last_lr()[0]
