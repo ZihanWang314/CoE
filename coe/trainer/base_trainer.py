@@ -80,7 +80,6 @@ class BaseTrainer(FSDPSFTTrainer):
         if config.get("fsdp", True):
             super().__init__(config, device_mesh, ulysses_device_mesh, dataset_class)
 
-            self.model.resize_token_embeddings(len(self.tokenizer))
         else:
             raise NotImplementedError
         
@@ -194,7 +193,7 @@ class BaseTrainer(FSDPSFTTrainer):
                 # Run validation if needed
                 if validation_interval and global_step % validation_interval == 0:
                     with _timer('validation', timing_raw):
-                        self._run_validation(global_step, rank, tracking)
+                        self._run_validation(global_step, rank, tracking if rank == 0 else None)
                     torch.distributed.barrier()
                 
                 # Save checkpoint if needed
@@ -216,7 +215,7 @@ class BaseTrainer(FSDPSFTTrainer):
                     metric['train/tflops'] = tflops
                     tracking.log({'train/tflops': tflops}, step=global_step)
             
-        self._run_validation(global_step, rank, tracking)
+        self._run_validation(global_step, rank, tracking if rank == 0 else None)
         torch.distributed.barrier()
         
         # Final checkpoint
