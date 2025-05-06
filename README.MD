@@ -1,7 +1,7 @@
 # Chain-of-Experts: Unlocking the Communication Power of MoEs
 <p align="center">
   <a href="https://www.notion.so/Chain-of-Experts-Unlocking-the-Communication-Power-of-MoEs-1ab9bb750b7980048d43e6aab3537cea"><img src="https://img.shields.io/badge/📝_Blog-FF5722?style=for-the-badge&logoColor=white" alt="Blog"></a>
-  <a href="#"><img src="https://img.shields.io/badge/🔍_Post-34A853?style=for-the-badge&logoColor=white" alt="Post"></a>
+  <a href="https://x.com/wzihanw/status/1896601518612021709"><img src="https://img.shields.io/badge/🔍_Post-34A853?style=for-the-badge&logoColor=white" alt="Post"></a>
  <a href="https://www.github.com/ZihanWang314/coe"><img src="https://img.shields.io/badge/💻_Code-EA4335?style=for-the-badge&logoColor=white" alt="Code"></a>
 </p>
 
