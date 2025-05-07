@@ -41,8 +41,8 @@ main() {
     check_conda || exit 1
     
     # Create and activate conda environment
-    print_step "Creating conda environment 'coe' with Python 3.12..."
-    conda create -n coe python=3.12 -y
+    print_step "Creating conda environment 'coe' with Python 3.9..."
+    conda create -n coe python=3.9 -y
     
     # Need to source conda for script environment
     eval "$(conda shell.bash hook)"

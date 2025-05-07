@@ -134,6 +134,8 @@ class BaseTrainer(FSDPSFTTrainer):
             tracking = Tracking(project_name=self.config.trainer.project_name,
                                 experiment_name=self.config.trainer.experiment_name,
                                 default_backend=self.config.trainer.logger)
+        else:
+            tracking = None
 
         global_step = 0
         # compute the total training steps.
@@ -149,8 +151,8 @@ class BaseTrainer(FSDPSFTTrainer):
         # Get data iterator so we can manually control iterations
         train_iterator = iter(self.train_dataloader)
     
-
-        wandb.log({"System-core/non_emb_params": sum(p.numel() for p in self.model.model.layers.parameters()) / (1024 ** 2)}, step=global_step)
+        if rank == 0:
+            wandb.log({"System-core/non_emb_params": sum(p.numel() for p in self.model.model.layers.parameters()) / (1024 ** 2)}, step=global_step)
 
         epoch = 0
         start_time = time.time()

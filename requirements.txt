@@ -5,3 +5,4 @@ accelerate
 numpy
 wandb
 hydra-core
+matplotlib

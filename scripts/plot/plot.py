@@ -30,7 +30,7 @@ start_idx = 4  # Index for step 100
 
 # Create plot with log scales
 plt.loglog(steps[start_idx:], moe_values[start_idx:], 
-           label='MoE(8/64)', 
+           label='MoE (K=8, C=1)',
            linestyle='-', 
            linewidth=2.5,
            marker='o',
@@ -39,7 +39,7 @@ plt.loglog(steps[start_idx:], moe_values[start_idx:],
            color='#1f77b4')
 
 plt.loglog(steps[start_idx:], coe_values[start_idx:], 
-           label='CoE-2(4/64)', 
+           label='CoE (K=4, C=2)', 
            linestyle='--', 
            linewidth=2.5,
            marker='s',

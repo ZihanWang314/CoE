@@ -57,7 +57,7 @@ def convert_to_regular_types(obj):
 import hydra
 
 @hydra.main(config_path='config', config_name='train', version_base=None)
-def main(config):
+def main(config):    
     if config.get("fsdp", True):
         local_rank, rank, world_size = initialize_global_process_group()
 
