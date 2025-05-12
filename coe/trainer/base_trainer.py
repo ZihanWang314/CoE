@@ -209,11 +209,11 @@ class BaseTrainer(FSDPSFTTrainer):
                     tracking.log(log_timing_raw, step=global_step)
 
             # === TFLOPS calculation ===
-            if rank == 0:
-                if 'train_step' in timing_raw and timing_raw['train_step'] > 0:
-                    tflops = self.estimate_tflops(self.fsdp_model, data, timing_raw['train_step'])
-                    metric['train/tflops'] = tflops
-                    tracking.log({'train/tflops': tflops}, step=global_step)
+            # if rank == 0:
+            #     if 'train_step' in timing_raw and timing_raw['train_step'] > 0:
+            #         tflops = self.estimate_tflops(self.fsdp_model, data, timing_raw['train_step'])
+            #         metric['train/tflops'] = tflops
+            #         tracking.log({'train/tflops': tflops}, step=global_step)
             
         self._run_validation(global_step, rank, tracking if rank == 0 else None)
         torch.distributed.barrier()
@@ -221,23 +221,23 @@ class BaseTrainer(FSDPSFTTrainer):
         # Final checkpoint
         self.save_checkpoint(step=global_step)
 
-    def estimate_tflops(self, model, batch, step_time_s):
-        """
-        Roughly estimate TFLOPS for the current step.
-        """
-        # Number of model parameters
-        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        # Assume input is TensorDict, get input_ids shape
-        if isinstance(batch, TensorDict):
-            batch_size = batch['input_ids'].shape[0]
-            seq_len = batch['input_ids'].shape[1]
-        else:
-            batch_size = batch['input_ids'].size(0)
-            seq_len = batch['input_ids'].size(1)
-        # 2 * param * batch * seq (forward + backward)
-        flops = 2 * num_params * batch_size * seq_len #TODO: coe may go through a param several times, this may be taken into account
-        tflops = flops / step_time_s / 1e12
-        return tflops
+    # def estimate_tflops(self, model, batch, step_time_s):
+    #     """
+    #     Roughly estimate TFLOPS for the current step.
+    #     """
+    #     # Number of model parameters
+    #     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    #     # Assume input is TensorDict, get input_ids shape
+    #     if isinstance(batch, TensorDict):
+    #         batch_size = batch['input_ids'].shape[0]
+    #         seq_len = batch['input_ids'].shape[1]
+    #     else:
+    #         batch_size = batch['input_ids'].size(0)
+    #         seq_len = batch['input_ids'].size(1)
+    #     # 2 * param * batch * seq (forward + backward)
+    #     flops = 2 * num_params * batch_size * seq_len #TODO: coe may go through a param several times, this may be taken into account
+    #     tflops = flops / step_time_s / 1e12
+    #     return tflops
 
     def training_step(self, batch: TensorDict, timing_raw=None):
         if timing_raw is None:
