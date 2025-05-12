@@ -588,13 +588,17 @@ class CoeMoE(nn.Module):
             for i, expert in enumerate(self.experts):
                 y[flat_topk_idx == i] = expert(hidden_states[flat_topk_idx == i])
             y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
+            # saving the routing logits
             y = y.to(hidden_states.dtype).view(*orig_shape)
             y = AddAuxiliaryLoss.apply(y, aux_loss)
         else:
             y = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
         if self.config.n_shared_experts is not None:
             y = y + self.shared_experts(identity)
-        return y
+        if getattr(self.config, "save_routing_logits", False):
+            return y, topk_idx, topk_weight
+        else:
+            return y, None, None
 
     @torch.no_grad()
     def moe_infer(self, x, topk_ids, topk_weight):
@@ -1207,8 +1211,9 @@ ATTENTION_CLASSES = {
 class CoeDecoderLayer(nn.Module):
     def __init__(self, config: CoeConfig, layer_idx: int):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
-
+        self.layer_idx = layer_idx
         self.self_attn = ATTENTION_CLASSES[config._attn_implementation](
             config=config, layer_idx=layer_idx
         )
@@ -1282,16 +1287,24 @@ class CoeDecoderLayer(nn.Module):
         def custom_forward(hidden_states, _iter):
             if self.inner_residual:
                 inner_residual = hidden_states
-            hidden_states = self.mlp(hidden_states, _iter)
+            hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
             if self.inner_residual:
                 hidden_states = inner_residual + hidden_states
-            return hidden_states
+            return hidden_states, topk_idx, topk_weight
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         for _iter in range(self.inner_iter):
-            hidden_states = custom_forward(hidden_states, _iter)
+            hidden_states, topk_idx, topk_weight = custom_forward(hidden_states, _iter)
+            if getattr(self.config, "save_routing_logits", False):
+                # save about layer_idx/_iter/topk_idx/topk_weight
+                import os
+                os.makedirs(f"outputs/routing_logits/layer_{self.layer_idx}", exist_ok=True)
+                with open(f"outputs/routing_logits/layer_{self.layer_idx}/iter_{_iter}_topk_idx.pt", "wb") as f:
+                    torch.save(topk_idx, f)
+                with open(f"outputs/routing_logits/layer_{self.layer_idx}/iter_{_iter}_topk_weight.pt", "wb") as f:
+                    torch.save(topk_weight, f)
         if self.outer_residual:
             hidden_states = residual + hidden_states
 

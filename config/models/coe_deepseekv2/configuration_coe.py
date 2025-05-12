@@ -148,6 +148,7 @@ class CoeConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
+        save_routing_logits=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -190,7 +191,7 @@ class CoeConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-
+        self.save_routing_logits = save_routing_logits
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
