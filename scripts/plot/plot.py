@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
+from matplotlib.ticker import ScalarFormatter
+
 plt.style.use('seaborn-v0_8-whitegrid')
 # mpl.rcParams['font.family'] = 'Arial'
 mpl.rcParams['font.size'] = 12
@@ -23,7 +25,7 @@ coe_values = data['64ept-8tpk-2itr'].values  # CoE data (assuming this is CoE-2)
 
 
 # Plot
-plt.figure(figsize=(12*0.7, 7*0.7))
+plt.figure(figsize=(12*0.5, 7*0.5))
 
 # Only include data from step 100 onward
 start_idx = 4  # Index for step 100
@@ -48,10 +50,14 @@ plt.loglog(steps[start_idx:], coe_values[start_idx:],
            color='#ff7f0e')
 
 # Add better labels and title
-plt.xlabel('Steps (log scale)', fontweight='bold', fontsize=14)
-plt.ylabel('Validation Loss (log scale)', fontweight='bold', fontsize=14)
-plt.title('Convergence: MoE vs CoE', 
-          fontweight='bold', fontsize=16, pad=20)
+plt.xlabel('Steps', fontweight='bold', fontsize=14)
+plt.ylabel('Validation Loss', fontweight='bold', fontsize=14)
+# plt.title('Convergence: MoE vs CoE', 
+        #   fontweight='bold', fontsize=16, pad=10)
+plt.gca().set_xticks([100, 200, 400, 600, 800, 1000])
+plt.gca().set_yticks([1, 2, 3, 4])
+plt.gca().xaxis.set_major_formatter(ScalarFormatter())
+plt.gca().yaxis.set_major_formatter(ScalarFormatter())
 
 # Improve legend
 plt.legend(frameon=True, fontsize=12, framealpha=0.7, 
@@ -64,7 +70,7 @@ plt.grid(True, which='major', linestyle='-', alpha=0.5)
 # Add annotations for key points
 plt.annotate('Faster initial\nconvergence', 
              xy=(150, 2.78), 
-             xytext=(200, 3.5),
+             xytext=(170, 3.2),
              arrowprops=dict(arrowstyle='->'),
              fontsize=12)
 

@@ -12,4 +12,5 @@ export MASTER_PORT=29501
 torchrun --master_port=$MASTER_PORT --nproc_per_node=4 main.py \
     model.override_config.num_experts_per_tok=4 \
     model.override_config.inner_iter=2 \
+    trainer.total_training_steps=10000 \
     trainer.experiment_name=test-64epts-2iter-4topk

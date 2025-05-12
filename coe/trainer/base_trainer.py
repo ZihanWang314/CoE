@@ -31,7 +31,6 @@ logger.setLevel(os.getenv('VERL_SFT_LOGGING_LEVEL', 'WARN'))
 from coe.utils.dataset.base_dataset import BaseDataset
 from coe.trainer.fsdp_sft_trainer import FSDPSFTTrainer
 from coe.utils.debug.performance import get_gpu_memory_usage
-# import wandb
 import time
 from codetiming import Timer
 from contextlib import contextmanager
