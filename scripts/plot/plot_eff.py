@@ -11,7 +11,7 @@ mpl.rcParams['axes.linewidth'] = 1.5
 mpl.rcParams['axes.edgecolor'] = '#333333'
 
 # Create figure with two subplots
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18*0.79, 7*0.79), gridspec_kw={'width_ratios': [1.1, 1]})
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), gridspec_kw={'width_ratios': [1.1, 1]})
 
 # ================ LEFT SUBPLOT - CONVERGENCE PERFORMANCE ================
 # Load the data
@@ -23,7 +23,7 @@ steps = data['Step'].values
 # CoE-2(4/48) and MoE(8/64)
 # Assuming these are in your columns, adjust as needed
 left_columns = ['64ept-8tpk-1itr', '64ept-4tpk-2itr', '48ept-4tpk-2itr']
-left_labels = ['MoE(8/64)', 'CoE-2(4/64)', 'CoE-2(4/48)']
+left_labels = ['MoE (K=8, N=64)', 'CoE (C=2, K=4, N=64)', 'CoE (C=2, K=4, N=48)']
 
 # Find the index where steps >= 100
 start_idx = np.where(steps >= 100)[0]
@@ -47,19 +47,30 @@ for i, (column, label) in enumerate(zip(left_columns, left_labels)):
                   color=left_colors[i])
 
 # Add labels and title for left plot
-ax1.set_xlabel('Steps (log scale)', fontweight='bold', fontsize=14)
-ax1.set_ylabel('Validation Loss (log scale)', fontweight='bold', fontsize=14)
+ax1.set_xlabel('Steps', fontweight='bold', fontsize=14)
+ax1.set_ylabel('Validation Loss', fontweight='bold', fontsize=14)
 ax1.set_title('Performance Comparison', fontweight='bold', fontsize=16)
 ax1.legend(frameon=True, fontsize=12, framealpha=0.7, edgecolor='#333333', loc='upper right')
 ax1.grid(True, which='minor', linestyle=':', alpha=0.4)
 ax1.grid(True, which='major', linestyle='-', alpha=0.5)
-ax1.set_xlim(370, 1000)
-ax1.set_ylim(1, 2)
+
+ax1.set_xticks([100, 200, 300, 400, 600, 800, 1000])
+ax1.set_yticks([1, 1.2, 1.4, 1.6, 1.8, 2, 2.5, 3])
+ax1.xaxis.set_major_formatter(ScalarFormatter(useMathText=False))
+ax1.xaxis.get_major_formatter().set_scientific(False)
+ax1.yaxis.set_major_formatter(ScalarFormatter(useMathText=False))
+ax1.yaxis.get_major_formatter().set_scientific(False)
+
+# Adjust axis limits to focus on the important part
+ax1.set_xlim(190, 1000)
+ax1.set_ylim(1, 3)
+
+
 ax1.set_facecolor('#f8f9fa')
 
 # ================ RIGHT SUBPLOT - EFFICIENCY METRICS ================
 # Create data for the right plot - Resource Efficiency
-models = ['CoE-2(4/48)', 'MoE(8/64)', 'CoE-2(4/64)']
+models = ['CoE (C=2, K=4, N=48)', 'MoE (K=8, N=64)', 'CoE (C=2, K=4, N=64)']
 params = [412.63, 544.51, 544.75]  # in million parameters
 memory = [9.64, 11.70, 11.70]  # in GB
 
@@ -83,28 +94,37 @@ ax2.axhline(y=100, color='red', linestyle='--', alpha=0.7, linewidth=1)
 
 # Add values on the bars
 for i, (p, m) in enumerate(zip(params_norm, memory_norm)):
-    ax2.text(r1[i], p+1, f"{p:.1f}%", ha='center', va='bottom', fontsize=10)
-    ax2.text(r2[i], m+1, f"{m:.1f}%", ha='center', va='bottom', fontsize=10)
+    p, m = round(p, 1), round(m, 1)
+    if p != 100.0:
+        ax2.text(r1[i], p+1, f"{p:.1f}%", ha='center', va='bottom', fontsize=10)
+    else:
+        ax2.text(r1[i], p+1, f"{p:.0f}%", ha='center', va='bottom', fontsize=10)
+    if m != 100.0:
+        ax2.text(r2[i], m+1, f"{m:.1f}%", ha='center', va='bottom', fontsize=10)
+    else:
+        ax2.text(r2[i], m+1, f"{m:.0f}%", ha='center', va='bottom', fontsize=10)
 
 # Highlight the memory reduction of CoE-2(4/48)
 memory_reduction = 100 - memory_norm[0]
 ax2.annotate(f"-{memory_reduction:.1f}% memory", 
             xy=(r2[0], memory_norm[0]+20), 
-            xytext=(r2[0]-0.1, memory_norm[0]+10),
+            xytext=(r2[0]-0.3, memory_norm[0]+10),
             fontsize=11,
             weight='bold',
             color='#2ca02c',
             bbox=dict(boxstyle="round,pad=0.3", alpha=0.2, fc="#2ca02c", ec="none"))
 
 # Add xticks for each model group
-ax2.set_xticks([r + barWidth for r in range(len(models))])
+ax2.set_xticks([r + barWidth/2 for r in range(len(models))])
 ax2.set_xticklabels(models)
+# make it smaller
+ax2.tick_params(axis='x', labelsize=10)
 
 # Set labels and title for right plot
 ax2.set_ylabel('Relative to MoE(8/64) (%)', fontweight='bold', fontsize=14)
 ax2.set_title('Resource Efficiency', fontweight='bold', fontsize=16)
 ax2.legend(frameon=True, fontsize=12, framealpha=0.7, edgecolor='#333333', loc='upper right')
-ax2.set_ylim(0, 130)
+ax2.set_ylim(0, 140)
 ax2.set_facecolor('#f8f9fa')
 
 # Add gridlines
@@ -113,8 +133,8 @@ ax2.spines['top'].set_visible(False)
 ax2.spines['right'].set_visible(False)
 
 # Main title for the entire figure
-plt.suptitle('CoE Reduces Memory Requirements while Maintaining Performance', 
-            fontweight='bold', fontsize=18, y=0.98)
+# plt.suptitle('CoE Reduces Memory Requirements while Maintaining Performance', 
+            # fontweight='bold', fontsize=18, y=0.98)
 
 # Adjust layout and save
 plt.tight_layout(rect=[0, 0, 1, 0.95])

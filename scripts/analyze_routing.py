@@ -18,7 +18,7 @@ output_path = "outputs/figure_coe"
 # model_name = "chain-of-experts/64ept-8tpk-1itr-slimpajama-lr2e-5-10k"
 # model_type = "moe"
 
-model_name = "chain-of-experts/64ept-4tpk-2itr-slimpajama-lr2e-5-10k"
+model_name = "chain-of-experts/64ept-4tpk-2itr-1SharedExp-metamathqa-2k-lr5e-5-bs256"
 model_type = "coe"
 
 # model_name = "chain-of-experts/64ept-4tpk-2itr-metamathqa-10k"
@@ -32,9 +32,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 # data = pd.read_parquet("data/gsm8k/test.parquet")
 # data_type = "gsm8k"
 
-data = load_dataset("iankur/SlimPajama-100M", split="train")
-data_type = "slimpajama"
+# data = load_dataset("iankur/SlimPajama-100M", split="train")
+# data_type = "slimpajama"
 
+data = load_dataset("meta-math/MetaMathQA-40K", split="train")
+data_type = "metamathqa"
 
 
 os.makedirs(output_path, exist_ok=True)
@@ -59,7 +61,7 @@ selected_layers = [0, 1, config.num_hidden_layers - 2, config.num_hidden_layers 
 matrix_dict = {layer: torch.zeros(63, 63) for layer in selected_layers}
 expert_count = {layer: {_iter: torch.zeros(63) for _iter in range(2)} for layer in selected_layers}
 # Accumulate over 100 samples
-for idx in tqdm(range(10)):
+for idx in tqdm(range(1000)):
     
     if data_type == "gsm8k":
         instance = data.iloc[idx]
@@ -67,6 +69,9 @@ for idx in tqdm(range(10)):
     elif data_type == "slimpajama":
         instance = data[idx]
         text = instance["text"]
+    elif data_type == "metamathqa":
+        instance = data[idx]
+        text = "question: " + instance["query"] + " answer: " + instance["response"]
     input_ids = tokenizer.encode(text, return_tensors="pt")[:, :1024].to("cuda")
     
     with torch.no_grad():
@@ -97,6 +102,8 @@ for idx in tqdm(range(10)):
 
 
 
+fig, axes = plt.subplots(1, len(selected_layers), figsize=(3 * len(selected_layers), 3))
+
 # Plot and save figures
 for layer in selected_layers:
     matrix = matrix_dict[layer]
@@ -104,16 +111,18 @@ for layer in selected_layers:
     used_experts = (matrix.sum(dim=1) > 0) | (matrix.sum(dim=0) > 0)
     matrix = matrix[used_experts, :][:, used_experts]
     matrix = matrix + 1
-    plt.figure(figsize=(8, 6))
-    # use log scale for both x and y
-    plt.imshow(matrix.numpy(), cmap='viridis', norm=LogNorm(vmin=1, vmax=matrix.max().item()* 100))
-    plt.colorbar()
-    plt.title(f"Layer {layer}: Expert Co-activation")
-    plt.xlabel("Expert in Iter1")
-    plt.ylabel("Expert in Iter0")
-    plt.tight_layout()
-    plt.savefig(f"{output_path}/layer_{layer}_routing_matrix.png")
-    plt.close()
+    ax = axes[layer]
+    im = ax.imshow(matrix.numpy(), cmap='viridis', norm=LogNorm(vmin=1, vmax=matrix.max().item() * 10))
+    ax.set_title(f"Layer {layer}")
+    ax.set_xlabel("Expert in Iter1")
+    if layer == 0:
+        ax.set_ylabel("Expert in Iter0")
+
+cbar_ax = fig.add_axes([0.92, 0.15, 0.015, 0.7])  # [left, bottom, width, height] in figure coords
+fig.colorbar(im, cax=cbar_ax)
+fig.tight_layout(rect=[0, 0, 0.91, 1])
+plt.savefig(f"{output_path}/layer_all_routing_matrix.png", dpi=300)
+plt.close()
 
 if model_type == "coe":
     for layer in selected_layers:

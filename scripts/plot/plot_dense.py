@@ -24,10 +24,10 @@ methods = [
 ]
 
 labels = [
-    'Dense (Total=K=8, C=2)',
-    'Dense (Total=K=8, C=1)',
-    'Sparse CoE (K=8, C=2)',
-    'Sparse MoE (K=8, C=1)'
+    'Dense (N=K=8, C=2)',
+    'Dense (N=K=8, C=1)',
+    'Sparse CoE (N=64, K=8, C=2)',
+    'Sparse MoE (N=64, K=8, C=1)'
 ]
 
 colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3']
@@ -51,13 +51,17 @@ ax.set_ylabel('Validation Loss', fontweight='bold', fontsize=14)
 ax.legend(frameon=True, fontsize=12, framealpha=0.7, edgecolor='#333333', loc='upper right')
 ax.grid(True, which='minor', linestyle=':', alpha=0.4)
 ax.grid(True, which='major', linestyle='-', alpha=0.5)
-ax.set_xticks([100, 200, 300, 400, 600, 800, 1000])
-ax.set_yticks([1, 1.5, 2, 2.5, 3])
-ax.xaxis.set_major_formatter(ScalarFormatter())
-ax.yaxis.set_major_formatter(ScalarFormatter())
+plt.gca().set_xticks([100, 200, 300, 400, 600, 800, 1000])
+plt.gca().set_yticks([1, 1.2, 1.4, 1.6, 1.8, 2, 2.5, 3])
+plt.gca().xaxis.set_major_formatter(ScalarFormatter(useMathText=False))
+plt.gca().xaxis.get_major_formatter().set_scientific(False)
+plt.gca().yaxis.set_major_formatter(ScalarFormatter(useMathText=False))
+plt.gca().yaxis.get_major_formatter().set_scientific(False)
 
-ax.set_xlim(200, 1000)
-ax.set_ylim(0.95, 3)
+# Adjust axis limits to focus on the important part
+plt.xlim(190, 1000)
+plt.ylim(1, 3)
+
 
 ax.set_facecolor('#f8f9fa')
 

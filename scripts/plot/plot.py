@@ -54,10 +54,17 @@ plt.xlabel('Steps', fontweight='bold', fontsize=14)
 plt.ylabel('Validation Loss', fontweight='bold', fontsize=14)
 # plt.title('Convergence: MoE vs CoE', 
         #   fontweight='bold', fontsize=16, pad=10)
-plt.gca().set_xticks([100, 200, 400, 600, 800, 1000])
-plt.gca().set_yticks([1, 2, 3, 4])
-plt.gca().xaxis.set_major_formatter(ScalarFormatter())
-plt.gca().yaxis.set_major_formatter(ScalarFormatter())
+plt.gca().set_xticks([100, 200, 300, 400, 600, 800, 1000])
+plt.gca().set_yticks([1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6])
+plt.gca().xaxis.set_major_formatter(ScalarFormatter(useMathText=False))
+plt.gca().xaxis.get_major_formatter().set_scientific(False)
+plt.gca().yaxis.set_major_formatter(ScalarFormatter(useMathText=False))
+plt.gca().yaxis.get_major_formatter().set_scientific(False)
+
+# Adjust axis limits to focus on the important part
+plt.xlim(190, 1000)
+plt.ylim(1, 2.6)
+
 
 # Improve legend
 plt.legend(frameon=True, fontsize=12, framealpha=0.7, 
@@ -73,10 +80,6 @@ plt.annotate('Faster initial\nconvergence',
              xytext=(170, 3.2),
              arrowprops=dict(arrowstyle='->'),
              fontsize=12)
-
-# Adjust axis limits to focus on the important part
-plt.xlim(90, 1000)
-plt.ylim(1, 4)
 
 # Add a subtle background color
 plt.gca().set_facecolor('#f8f9fa')
