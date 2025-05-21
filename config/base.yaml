@@ -36,6 +36,7 @@ use_remove_padding: False
 trainer:
   default_local_dir: /tmp/sft_model
   default_hdfs_dir: hdfs://tmp/experiments/gsm8k/gemma-1.1-7b-it/ # change the hdfs path here
+  save_interval_steps: null
   resume_path: null
   project_name: gsm8k-sft
   experiment_name: test
