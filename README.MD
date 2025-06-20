@@ -42,8 +42,18 @@ Our research introduces Chain-of-Experts (CoE), a new approach that innovates ho
 bash scripts/setup.sh # setting up environment
 ```
 ## running experiments
+We provide a simplified codebase for running experiments through command-line configuration:
 ```bash
-bash runs/run.sh # run the basic experiments
+export PYTHONPATH=$(pwd):$PYTHONPATH
+export CUDA_VISIBLE_DEVICES="0,1,2,3"
+export MASTER_PORT=29501
+torchrun --master_port=$MASTER_PORT --nproc_per_node=4 main.py \
+    model.override_config.num_experts_per_tok=4 \
+    model.override_config.inner_iter=2 \
+    trainer.total_training_steps=10000 \
+    trainer.experiment_name=test-64epts-2iter-4topk \
+    trainer.save_interval_steps=1000 \
+    trainer.default_local_dir=./outputs/test-64epts-2iter-4topk
 ```
 
 
@@ -61,17 +71,12 @@ In pretraining on Math tasks (1000 steps), CoE-2(4/64) significantly outperforms
 
 ![image.png](scripts/plot/plot.png)
 
-To run this experiment, please directly run `bash runs/run.sh`
+To run this experiment, please directly run `bash runs/run_latest.sh`
 
-We further evaluate CoE on “dense” (choose 8 in 8 experts) models, demonstrating that Recurrent Processing are more effective on Sparse MoE than on Dense models, and **CoE is a Sparse MoE-specific method that works effectively with Fine-Grained Sparse MoE models. As shown in the figure, recurrent for 2 times are no benefits to the Dense model.**
+We further evaluate CoE on "dense" (choose 8 in 8 experts) models, demonstrating that Recurrent Processing are more effective on Sparse MoE than on Dense models, and **CoE is a Sparse MoE-specific method that works effectively with Fine-Grained Sparse MoE models. As shown in the figure, recurrent for 2 times are no benefits to the Dense model.**
 
 ![image.png](scripts/plot/plot_dense.png)
 
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "ds_8ept-8tpk-2itr:num_experts=8:num_experts_per_tok=8:inner_iter=2"
-# "ds_8ept-8tpk-1itr:num_experts=8:num_experts_per_tok=8:inner_iter=1"
-```
 
 ### Resource Efficiency
 
@@ -80,12 +85,6 @@ To run this experiment, please uncomment the following lines in `runs/run.sh`:
 As shown below, CoE-2(4/48) achieves performance similar to MoE(8/64) but uses fewer total experts. **Under matched loss conditions, memory requirements are reduced by 18%.**
 
 ![image.png](scripts/plot/plot_eff.png)
-
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "mm_48ept-4tpk-2itr:num_experts=48:num_experts_per_tok=4:inner_iter=2"
-# "mm_48ept-8tpk-1itr:num_experts=48:num_experts_per_tok=8:inner_iter=1"
-```
 
 
 (note: we recorded the GPU memory allocated, related to the theoretical minimum memory with micro_bsz=1; in practice, memory usage is higher due to the large batch size used in experiments)
@@ -100,25 +99,12 @@ We evaluated CoE-2(8/64), 4 layers vs MoE(8/64), 8  or 12 layers - the latter wi
 
 ![image.png](scripts/plot/plot_lyr.png)
 
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "ly_64ept-8tpk-1itr-8lyr:num_experts=64:num_experts_per_tok=8:inner_iter=1:num_hidden_layers=8"
-# "ly_64ept-8tpk-1itr-12lyr:num_experts=64:num_experts_per_tok=8:inner_iter=1:num_hidden_layers=12"
-```
-
 
 #### *b) Expanding iteration count (CoE) > Expanding expert selection count*
 
 CoE-2(8/64), 4 layers vs MoE(16/64) or MoE(24/64), 4 layers - **Memory and Compute requirements are consistent, but CoE performs better than scaling expert selection count.**
 
 ![image.png](scripts/plot/plot_scal.png)
-
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "cc_64ept-16tpk-1itr:num_experts=64:num_experts_per_tok=16:inner_iter=1"
-# "cc_64ept-24tpk-1itr:num_experts=64:num_experts_per_tok=24:inner_iter=1"
-# "cc_64ept-8tpk-2itr:num_experts=64:num_experts_per_tok=8:inner_iter=2"
-```
 
 
 #### 3. Key Architectural Findings
@@ -137,11 +123,6 @@ We implemented a variant with outer residual connections, setting $\mathbb{I}_r$
 
 ![image.png](scripts/plot/plot_abl.png)
 
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "ab_64ept-8tpk-2itr-ore:num_experts=64:num_experts_per_tok=8:inner_iter=2:outer_residual=true"
-# "ab_64ept-8tpk-2itr-noig:num_experts=64:num_experts_per_tok=8:inner_iter=2:outer_residual=true:use_igate=false"
-```
 
 ### Theoretical Observations: Free Lunch Effect
 

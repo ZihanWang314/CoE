@@ -47,7 +47,7 @@ base_args=(
     "data.train_batch_size=$TRAIN_BATCH_SIZE"
     "+fsdp=true"
     "model.partial_pretrain=$MODEL_PATH"
-    "+model.from_config=true"
+    "++model.from_config=true"
     "+model.override_config._attn_implementation=$ATTN_IMPL"
     "+model.override_config.outer_residual=$OUTER_RESIDUAL"
     "+model.override_config.inner_residual=$INNER_RESIDUAL"
@@ -111,8 +111,10 @@ for config in "${CONFIGS[@]}"; do
             
             # Add to command
             # if key is in above, use ++, otherwise use +
-            if [[ "$key" == "outer_residual" || "$key" == "inner_residual" || "$key" == "use_igate" ]]; then
-                cmd+=" ++model.override_config.$key=$value"
+            if [[ "$key" == "outer_residual" || "$key" == "inner_residual" ]]; then
+                cmd+=" +model.override_config.residual=$value"
+            elif [[ "$key" == "use_igate" ]]; then
+                cmd+=" ++model.override_config.use_igate=$value"
             else
                 cmd+=" +model.override_config.$key=$value"
             fi

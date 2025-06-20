@@ -61,8 +61,8 @@ main() {
     pip install -e .
     cd ..
 
-    print_step "downloading dataset..."
-    python scripts/download_dataset.py
+    print_step "downloading dataset (by default, only downloading metamathqa)..."
+    python scripts/download_dataset.py --dataset gsm8k
 
     # Install PyTorch with CUDA if available
     if check_cuda; then
@@ -90,13 +90,13 @@ main() {
         fi
         
         print_step "Installing PyTorch with CUDA support..."
-        pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121
+        pip install torch==2.5.0 --index-url https://download.pytorch.org/whl/cu121
         
         print_step "Installing flash-attention..."
         pip3 install flash-attn --no-build-isolation
     else
         print_step "Installing PyTorch without CUDA support..."
-        pip install torch==2.4.0
+        pip install torch==2.5.0
     fi
     
     # Install remaining requirements

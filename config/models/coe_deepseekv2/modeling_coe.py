@@ -1234,8 +1234,7 @@ class CoeDecoderLayer(nn.Module):
             config.hidden_size, eps=config.rms_norm_eps
         )
         self.inner_iter = config.inner_iter
-        self.outer_residual = config.outer_residual
-        self.inner_residual = config.inner_residual
+        self.residual = getattr(config, "residual", "inner") # in ['outer', 'inner', 'addinit', 'none']
 
 
     def forward(
@@ -1284,19 +1283,25 @@ class CoeDecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        def custom_forward(hidden_states, _iter):
-            if self.inner_residual:
+        def custom_forward(hidden_states, init_residual, _iter):
+            if self.residual == 'inner':
                 inner_residual = hidden_states
             hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
-            if self.inner_residual:
+            if self.residual == 'inner':
                 hidden_states = inner_residual + hidden_states
+            elif self.residual == 'addinit':
+                hidden_states = init_residual + hidden_states
             return hidden_states, topk_idx, topk_weight
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
+        init_residual = None
+        if self.residual == 'addinit':
+            init_residual = hidden_states
+
         for _iter in range(self.inner_iter):
-            hidden_states, topk_idx, topk_weight = custom_forward(hidden_states, _iter)
+            hidden_states, topk_idx, topk_weight = custom_forward(hidden_states, init_residual, _iter)
             if getattr(self.config, "save_routing_logits", False):
                 # save about layer_idx/_iter/topk_idx/topk_weight
                 import os
@@ -1305,8 +1310,9 @@ class CoeDecoderLayer(nn.Module):
                     torch.save(topk_idx, f)
                 with open(f"outputs/routing_logits/layer_{self.layer_idx}/iter_{_iter}_topk_weight.pt", "wb") as f:
                     torch.save(topk_weight, f)
-        if self.outer_residual:
+        if self.residual == 'outer':
             hidden_states = residual + hidden_states
+
 
         outputs = (hidden_states,)
 
