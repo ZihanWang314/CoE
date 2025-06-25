@@ -43,7 +43,7 @@ bash scripts/setup.sh # setting up environment
 ```
 ## running experiments
 ```bash
-bash runs/run.sh # run the basic experiments
+bash runs/run_latest.sh # run the basic experiments
 ```
 
 
@@ -51,13 +51,13 @@ bash runs/run.sh # run the basic experiments
 
 We adopted the DeepSeekV2 structure and conducted a series of experiments with a 500M-level MoE using a 32K token batch size trained for 1000 steps to validate CoE's effectiveness. A single training run uses one H100 for about 30 minutes or one 4090 for about 2 hours. More experimental details follow.
 
-Our experimental method is named as ${\rm\{CoE/MoE\}}-C(K/N)$, for example, **CoE-2(4/64) represents using CoE with 2 iteration cycles, selecting 4 experts each time, with a total of 64 experts per layer.**
+Our experimental method is named as ${\rm\{CoE/MoE\}} (C, K, N)$, for example, **CoE (C=2, K=4, N=64) represents using CoE with 2 iteration cycles, selecting 4 experts each time, with a total of 64 experts per layer.**
 
 ### Performance Advantages:
 
 #### With similar compute and memory budgets, CoE clearly outperforms traditional approaches.
 
-In pretraining on Math tasks (1000 steps), CoE-2(4/64) significantly outperforms MoE(8/64), **reducing loss from 1.20 to 1.12 with a steeper downward trend with similar compute and memory budget.** 
+In pretraining on Math tasks (1000 steps), CoE (C=2, K=4, N=64) significantly outperforms MoE(K=8, N=64), **reducing loss from 1.20 to 1.12 with a steeper downward trend with similar compute and memory budget.** 
 
 ![image.png](scripts/plot/plot.png)
 
@@ -67,25 +67,13 @@ We further evaluate CoE on “dense” (choose 8 in 8 experts) models, demonstra
 
 ![image.png](scripts/plot/plot_dense.png)
 
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "ds_8ept-8tpk-2itr:num_experts=8:num_experts_per_tok=8:inner_iter=2"
-# "ds_8ept-8tpk-1itr:num_experts=8:num_experts_per_tok=8:inner_iter=1"
-```
-
 ### Resource Efficiency
 
 #### 1. With similar computation, CoE reduces memory requirements.
 
-As shown below, CoE-2(4/48) achieves performance similar to MoE(8/64) but uses fewer total experts. **Under matched loss conditions, memory requirements are reduced by 18%.**
+As shown below, CoE (C=2, K=4, N=48) achieves performance similar to MoE (K=8, N=64) but uses fewer total experts. **Under matched loss conditions, memory requirements are reduced by 18%.**
 
 ![image.png](scripts/plot/plot_eff.png)
-
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "mm_48ept-4tpk-2itr:num_experts=48:num_experts_per_tok=4:inner_iter=2"
-# "mm_48ept-8tpk-1itr:num_experts=48:num_experts_per_tok=8:inner_iter=1"
-```
 
 
 (note: we recorded the GPU memory allocated, related to the theoretical minimum memory with micro_bsz=1; in practice, memory usage is higher due to the large batch size used in experiments)
@@ -96,29 +84,16 @@ To run this experiment, please uncomment the following lines in `runs/run.sh`:
 
 #### *a) Expanding iteration count (CoE) > Expanding model layers*
 
-We evaluated CoE-2(8/64), 4 layers vs MoE(8/64), 8  or 12 layers - the latter with 8 layers matches CoE performance but **has higher Memory requirements.**
+We evaluated CoE (C=2, K=8, N=64), 4 layers vs MoE (K=8, N=64), 8  or 12 layers - the latter with 8 layers matches CoE performance but **has higher Memory requirements.**
 
 ![image.png](scripts/plot/plot_lyr.png)
-
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "ly_64ept-8tpk-1itr-8lyr:num_experts=64:num_experts_per_tok=8:inner_iter=1:num_hidden_layers=8"
-# "ly_64ept-8tpk-1itr-12lyr:num_experts=64:num_experts_per_tok=8:inner_iter=1:num_hidden_layers=12"
-```
 
 
 #### *b) Expanding iteration count (CoE) > Expanding expert selection count*
 
-CoE-2(8/64), 4 layers vs MoE(16/64) or MoE(24/64), 4 layers - **Memory and Compute requirements are consistent, but CoE performs better than scaling expert selection count.**
+CoE (C=2, K=8, N=64), 4 layers vs MoE (K=16, N=64) orMoE (K=24, N=64), 4 layers - **Memory and Compute requirements are consistent, but CoE performs better than scaling expert selection count.**
 
 ![image.png](scripts/plot/plot_scal.png)
-
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "cc_64ept-16tpk-1itr:num_experts=64:num_experts_per_tok=16:inner_iter=1"
-# "cc_64ept-24tpk-1itr:num_experts=64:num_experts_per_tok=24:inner_iter=1"
-# "cc_64ept-8tpk-2itr:num_experts=64:num_experts_per_tok=8:inner_iter=2"
-```
 
 
 #### 3. Key Architectural Findings
@@ -137,11 +112,6 @@ We implemented a variant with outer residual connections, setting $\mathbb{I}_r$
 
 ![image.png](scripts/plot/plot_abl.png)
 
-To run this experiment, please uncomment the following lines in `runs/run.sh`:
-```bash
-# "ab_64ept-8tpk-2itr-ore:num_experts=64:num_experts_per_tok=8:inner_iter=2:outer_residual=true"
-# "ab_64ept-8tpk-2itr-noig:num_experts=64:num_experts_per_tok=8:inner_iter=2:outer_residual=true:use_igate=false"
-```
 
 ### Theoretical Observations: Free Lunch Effect
 
@@ -156,7 +126,7 @@ Perhaps most significantly, CoE provides what we call a "free lunch" acceleratio
 
 #### Dataset
 
-We use the MetaMathQA dataset (link: https://huggingface.co/datasets/metamath/MetaMathQA), which is augmented from GSM8K and MATH datasets, without general data from the web.
+We use the MetaMathQA dataset (link: https://huggingface.co/datasets/metamath/MetaMathQA), which is augmented from GSM8K and MATH datasets, and also general data from the web.
 
 #### Model Configuration
 
@@ -171,11 +141,11 @@ We based our implementation on the **DeepSeek-V2-Lite** architecture, creating a
 
 #### Training Settings
 
-Batch size: 64, Sequence length: 512, Training steps: 1000, Optimizer: AdamW, Learning rate: 3e-4, Learning rate schedule: 10% Warmup, betas: [0.9, 0.95], weight_decay: 0.01, warmup_steps_ratio: 0.1, clip_grad: 1.0.
+Batch size: 64, Sequence length: 512, Training steps: 1000-10000, Optimizer: AdamW, Learning rate: 3e-4, Learning rate schedule: 10% Warmup, betas: [0.9, 0.95], weight_decay: 0.01, warmup_steps_ratio: 0.1, clip_grad: 1.0.
 
 #### System Settings
 
-Training used a modified version of the [**veRL**](https://github.com/volcengine/verl) architecture (adapted from the original implementation). Experiments were conducted on servers with single H100 GPUs. Each run of experiment is done in a single hour.
+Training used a modified version of the [**veRL**](https://github.com/volcengine/verl) architecture (adapted from the original implementation). Experiments were conducted on servers with single H100 GPUs. 
 
 ### Conclusion
 
