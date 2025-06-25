@@ -201,12 +201,16 @@ This research opens new pathways for efficiently scaling language models, potent
 
 This repository is based on our research on Chain-of-Experts (CoE). For more technical details and experimental results, please stay tuned with our forthcoming complete research paper.
 
-# Contributors
-
-[Zihan Wang*](https://zihanwang314.github.io/)
-[Rui Pan*](https://research4pan.github.io/)
-[Lu Yin*](https://luuyin.com/)
-[Manling Li*](https://limanling.github.io/)
-[Shiwei Liu*](https://shiweiliuiiiiiii.github.io/)
-
-*Equal contribution. ZW and SL initiated the project. LY explored MoE internal processing mechanisms. ZW proposed the sequential expert and CoE concepts, implemented the code, and conducted experiments. SL proposed the independent gating mechanism. RP explored inter-layer importance and contributed to the dataset. ML provided experimental guidance and cloud computing services. ZW and ML prepared the report and visualization materials.
+# Citation
+If you find our paper useful, we'd greatly appreciate it if you consider citing our paper:
+```
+@misc{chain-of-experts,
+      title={Chain-of-Experts: Unlocking the Communication Power of Mixture-of-Experts Models}, 
+      author={Zihan Wang and Rui Pan and Jiarui Yao and Robert Csordas and Linjie Li and Lu Yin and Jiajun Wu and Tong Zhang and Manling Li and Shiwei Liu},
+      year={2025},
+      eprint={2506.18945},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2506.18945}, 
+}
+```
