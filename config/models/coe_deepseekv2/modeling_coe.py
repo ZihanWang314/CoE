@@ -385,7 +385,7 @@ class CoeMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -570,16 +570,26 @@ class CoeMoE(nn.Module):
             self.shared_experts = CoeMLP(
                 config=config, intermediate_size=intermediate_size
             )
+        
+        # Learnable weight for CoE transformation: y2 = y1 * weight
+        # This weight is initialized to 0 so that initially y2 = 0
+        self.coe_weights = nn.ParameterList([
+            nn.Parameter(torch.zeros(config.hidden_size)) for _ in range(self.inner_iter - 1)
+        ])
 
     def forward(self, hidden_states, _iter: int):
         identity = hidden_states
         orig_shape = hidden_states.shape
+        
+        # First iteration: g = gate(x), y1 = experts(g, x)
         if self.use_igate:
             topk_idx, topk_weight, aux_loss = self.gate[_iter](hidden_states)
         else:
             topk_idx, topk_weight, aux_loss = self.gate(hidden_states)    
+        
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         flat_topk_idx = topk_idx.view(-1)
+        
         if self.training:
             hidden_states = hidden_states.repeat_interleave(
                 self.num_experts_per_tok, dim=0
@@ -595,6 +605,7 @@ class CoeMoE(nn.Module):
             y = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
         if self.config.n_shared_experts is not None:
             y = y + self.shared_experts(identity)
+
         if getattr(self.config, "save_routing_logits", False):
             return y, topk_idx, topk_weight
         else:
@@ -1284,19 +1295,25 @@ class CoeDecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        def custom_forward(hidden_states, _iter):
-            if self.inner_residual:
-                inner_residual = hidden_states
-            hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
-            if self.inner_residual:
-                hidden_states = inner_residual + hidden_states
-            return hidden_states, topk_idx, topk_weight
-
+        # def custom_forward(hidden_states, _iter):
+        #     if self.inner_residual:
+        #         inner_residual = hidden_states
+        #     hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
+        #     if self.inner_residual:
+        #         hidden_states = inner_residual + hidden_states
+        #     return hidden_states, topk_idx, topk_weight
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         for _iter in range(self.inner_iter):
-            hidden_states, topk_idx, topk_weight = custom_forward(hidden_states, _iter)
+            if _iter == 0:
+                hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
+            else:
+                inner_residual = hidden_states
+                hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
+                hidden_states = hidden_states * self.mlp.coe_weights[_iter - 1]
+                hidden_states = inner_residual + hidden_states
+
             if getattr(self.config, "save_routing_logits", False):
                 # save about layer_idx/_iter/topk_idx/topk_weight
                 import os

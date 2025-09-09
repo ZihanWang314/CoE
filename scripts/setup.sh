@@ -47,6 +47,8 @@ main() {
     # Need to source conda for script environment
     eval "$(conda shell.bash hook)"
     conda activate coe
+
+    pip install uv
     
     # Clone repository
     # print_step "Cloning coe repository..."
@@ -58,11 +60,11 @@ main() {
     git submodule init
     git submodule update
     cd verl
-    pip install -e .
+    uv pip install -e .
     cd ..
 
     print_step "downloading dataset..."
-    python scripts/download_dataset.py
+    # python scripts/download_dataset.py
 
     # Install PyTorch with CUDA if available
     if check_cuda; then
@@ -90,18 +92,18 @@ main() {
         fi
         
         print_step "Installing PyTorch with CUDA support..."
-        pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121
+        uv pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121
         
         print_step "Installing flash-attention..."
-        pip3 install flash-attn --no-build-isolation
+        uv pip install flash-attn --no-build-isolation
     else
         print_step "Installing PyTorch without CUDA support..."
-        pip install torch==2.4.0
+        uv pip install torch==2.4.0
     fi
     
     # Install remaining requirements
     print_step "Installing additional requirements..."
-    pip install -r requirements.txt
+    uv pip install -r requirements.txt
     
     echo -e "${GREEN}Installation completed successfully!${NC}"
     echo "To activate the environment, run: conda activate coe"

@@ -59,7 +59,7 @@
   "v_head_dim": 128,
   "vocab_size": 102400,
   "inner_iter": 1,
-  "outer_residual": false,
+  "outer_residual": true,
   "inner_residual": true,
   "use_igate": true
 }

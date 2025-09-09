@@ -149,6 +149,10 @@ class CoeConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         save_routing_logits=False,
+        inner_iter=1,
+        use_igate=False,
+        inner_residual=True,
+        outer_residual=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -192,6 +196,10 @@ class CoeConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.save_routing_logits = save_routing_logits
+        self.inner_iter = inner_iter
+        self.use_igate = use_igate
+        self.inner_residual = inner_residual
+        self.outer_residual = outer_residual
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
