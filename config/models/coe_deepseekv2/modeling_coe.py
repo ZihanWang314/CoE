@@ -1305,25 +1305,30 @@ class CoeDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        for _iter in range(self.inner_iter):
-            if _iter == 0:
-                hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
-            else:
-                inner_residual = hidden_states
-                hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
-                hidden_states = hidden_states * self.mlp.coe_weights[_iter - 1]
-                hidden_states = inner_residual + hidden_states
+        if isinstance(self.mlp, CoeMoE):
+            for _iter in range(self.inner_iter):
+                if _iter == 0:
+                    hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
+                else:
+                    inner_residual = hidden_states
+                    hidden_states, topk_idx, topk_weight = self.mlp(hidden_states, _iter)
+                    hidden_states = hidden_states * self.mlp.coe_weights[_iter - 1]
+                    hidden_states = inner_residual + hidden_states
 
-            if getattr(self.config, "save_routing_logits", False):
-                # save about layer_idx/_iter/topk_idx/topk_weight
-                import os
-                os.makedirs(f"outputs/routing_logits/layer_{self.layer_idx}", exist_ok=True)
-                with open(f"outputs/routing_logits/layer_{self.layer_idx}/iter_{_iter}_topk_idx.pt", "wb") as f:
-                    torch.save(topk_idx, f)
-                with open(f"outputs/routing_logits/layer_{self.layer_idx}/iter_{_iter}_topk_weight.pt", "wb") as f:
-                    torch.save(topk_weight, f)
-        if self.outer_residual:
-            hidden_states = residual + hidden_states
+                if getattr(self.config, "save_routing_logits", False):
+                    # save about layer_idx/_iter/topk_idx/topk_weight
+                    import os
+                    os.makedirs(f"outputs/routing_logits/layer_{self.layer_idx}", exist_ok=True)
+                    with open(f"outputs/routing_logits/layer_{self.layer_idx}/iter_{_iter}_topk_idx.pt", "wb") as f:
+                        torch.save(topk_idx, f)
+                    with open(f"outputs/routing_logits/layer_{self.layer_idx}/iter_{_iter}_topk_weight.pt", "wb") as f:
+                        torch.save(topk_weight, f)
+            if self.outer_residual:
+                hidden_states = residual + hidden_states
+        else:
+            hidden_states = self.mlp(hidden_states)
+            if self.outer_residual:
+                hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 

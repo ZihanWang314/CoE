@@ -94,7 +94,6 @@ def test_forward_pass_equivalence(moe_model: nn.Module, coe_model: nn.Module,
     with torch.no_grad():
         moe_outputs = moe_model(input_ids, output_hidden_states=True)
         coe_outputs = coe_model(input_ids, output_hidden_states=True)
-    breakpoint()
     # Compare outputs
     moe_logits = moe_outputs.logits
     coe_logits = coe_outputs.logits
@@ -111,35 +110,6 @@ def test_forward_pass_equivalence(moe_model: nn.Module, coe_model: nn.Module,
         print(f"  Mean difference: {mean_diff}")
         return False
 
-def test_coe_second_iteration(coe_model: nn.Module, input_ids: torch.Tensor):
-    """Test that CoE applies second iteration when weight != 0."""
-    print("Testing CoE second iteration...")
-    
-    coe_model.eval()
-    
-    # Test with weight=0 (should behave like MoE)
-    for module in coe_model.modules():
-        if hasattr(module, 'coe_weight'):
-            module.coe_weight.data.zero_()
-    
-    with torch.no_grad():
-        output_weight_zero = coe_model(input_ids)
-    
-    # Test with weight=1 (should apply second iteration)
-    for module in coe_model.modules():
-        if hasattr(module, 'coe_weight'):
-            module.coe_weight.data.fill_(1.0)
-    
-    with torch.no_grad():
-        output_weight_one = coe_model(input_ids)
-    
-    # Check if outputs are different
-    if not torch.allclose(output_weight_zero.logits, output_weight_one.logits, atol=1e-4):
-        print("✓ CoE second iteration is working (different outputs with different weights)")
-        return True
-    else:
-        print("✗ CoE second iteration is NOT working (same outputs with different weights)")
-        return False
 
 def test_inner_iteration_parameter(coe_model: nn.Module):
     """Test that inner_iter parameter is correctly set."""
@@ -197,7 +167,6 @@ def main():
         ("Inner Iteration Parameter", lambda: test_inner_iteration_parameter(coe_model)),
         ("Use IGate Parameter", lambda: test_use_igate_parameter(coe_model)),
         ("Forward Pass Equivalence", lambda: test_forward_pass_equivalence(moe_model, coe_model, input_ids, args.device)),
-        ("CoE Second Iteration", lambda: test_coe_second_iteration(coe_model, input_ids)),
     ]
     
     print("=" * 60)

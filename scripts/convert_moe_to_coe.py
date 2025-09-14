@@ -22,7 +22,7 @@ import copy
 def load_moe_model(model_path: str, device: str = "cpu"):
     """Load a DeepSeekV2 MoE model."""
     print(f"Loading MoE model from {model_path}")
-    config = AutoConfig.from_pretrained(model_path)
+    config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype=torch.float32,
