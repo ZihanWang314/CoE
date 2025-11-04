@@ -1,5 +1,6 @@
 
 # Step 1: setup
+```bash
 git clone https://github.com/ZihanWang314/CoE.git
 cd CoE
 git checkout convert_moe_to_coe
@@ -13,15 +14,18 @@ pip install torch==2.5.0 --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 pip install deepspeed==0.16.9
 pip install datasets==3.6.0
+```
 
-Step 2: clone llama factory
+# Step 2: clone llama factory
+```bash
 git clone --depth 1 https://github.com/hiyouga/LLaMA-Factory.git
 cd LLaMA-Factory
 pip install -e ".[metrics]" --no-build-isolation
 cd ..
+```
 
-
-Step 3: initialize checkpoint from a MoE model. This may take several minutes
+# Step 3: initialize checkpoint from a MoE model. This may take several minutes
+```bash
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export NEW_MODEL_DIR="./coe_dsv2_lite"
 python scripts/convert_moe_to_coe.py --moe_model_path deepseek-ai/deepseek-v2-lite --output_path $NEW_MODEL_DIR --device cuda
@@ -32,10 +36,10 @@ cp config/models/coe_deepseekv2/configuration_coe.py $NEW_MODEL_DIR
 jq '.auto_map={"AutoConfig":"configuration_coe.CoeConfig","AutoModel":"modeling_coe.CoeModel","AutoModelForCausalLM":"modeling_coe.CoeForCausalLM"}' coe_dsv2_lite/config.json > t && mv t ${NEW_MODEL_DIR}/config.json
 
 python scripts/verify_coe_conversion.py --moe_model_path deepseek-ai/deepseek-v2-lite --coe_model_path $NEW_MODEL_DIR # verify if it is correct
+```
 
 
-
-Step 4: train with LlamaFactory
+# Step 4: train with LlamaFactory
 ```bash
 sed -i '/dataset = load_dataset(/,/)/ s/split=dataset_attr.split,/&\
             trust_remote_code=True,/' LLaMA-Factory/src/llamafactory/data/loader.py
@@ -63,4 +67,4 @@ llamafactory-cli train third_party/LLaMA-Factory/train_moe.yaml \
     dataset=slimpajama-1b \
     stage=pt \
     > log.log 2>&1
-
+```
