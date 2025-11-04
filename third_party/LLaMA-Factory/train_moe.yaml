@@ -16,6 +16,7 @@ max_samples: 100000
 overwrite_cache: true
 preprocessing_num_workers: 16
 dataloader_num_workers: 4
+dataset_dir: LLaMA-Factory/data
 
 ### output
 output_dir: coe/checkpoints/DeepSeek-V2-Lite/metamathqa
